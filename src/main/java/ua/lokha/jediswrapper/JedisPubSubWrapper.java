@@ -52,6 +52,7 @@ public class JedisPubSubWrapper implements AutoCloseable {
      */
     private final Lock lock = new ReentrantLock();
     private final Condition subscribed = lock.newCondition();
+    private final Condition unsubscribed = lock.newCondition();
 
     /**
      * Используется для пометки этого ресурса как закрытого.
@@ -109,7 +110,6 @@ public class JedisPubSubWrapper implements AutoCloseable {
      *                 Метод слушателя {@link JedisPubSubListener#onMessage(String, String)} будет вызываться
      *                 именно в этом обработчике.
      */
-    @SneakyThrows
     public JedisPubSubWrapper(Pool<Jedis> pool, Executor executor) {
         this.pool = pool;
         this.executor = executor;
@@ -120,31 +120,7 @@ public class JedisPubSubWrapper implements AutoCloseable {
                     lock.lock();
                     String[] channels;
                     try {
-                        pubSub = new JedisPubSub() {
-                            @Override
-                            public void onMessage(String channel, String message) {
-                                callListeners(channel, message);
-                            }
-
-                            @Override
-                            public void onSubscribe(String channel, int subscribedChannels) {
-                                if (channel.equals(dummyChannel)) {
-                                    resubscribeCount++;
-                                    if (resubscribeCount > 1) {
-                                        // вызывается в случае повторной регистрации подписки,
-                                        // если предыдущая по какой-то причине оборвалась
-                                        log.info("Подписка зарегистрирована заново в " + resubscribeCount + " раз.");
-                                    }
-
-                                    lock.lock();
-                                    try {
-                                        subscribed.signalAll();
-                                    } finally {
-                                        lock.unlock();
-                                    }
-                                }
-                            }
-                        };
+                        pubSub = new PubSub();
 
                         channels = new String[subscribes.size() + 1];
                         channels[0] = dummyChannel;
@@ -164,11 +140,8 @@ public class JedisPubSubWrapper implements AutoCloseable {
                     log.severe("Подписка оборвалась с ошибкой.");
                     e.printStackTrace();
                 }
-                System.out.println("done while");
-
             }
 
-            System.out.println("done all");
             // на всякий случай, если поток завершил работу в результате ошибки
             close();
         }, this.getClass().getSimpleName() + " Thread");
@@ -191,7 +164,6 @@ public class JedisPubSubWrapper implements AutoCloseable {
      * @return слушатель, переданный параметром {@code listener}. Он выступает индентификатором подписки,
      * с помощью слушателя можно отменить подписку методом {@link #unsubscribe(JedisPubSubListener)}.
      */
-    @SneakyThrows
     public JedisPubSubListener subscribe(String channel, JedisPubSubListener listener) {
         lock.lock();
         try {
@@ -222,7 +194,6 @@ public class JedisPubSubWrapper implements AutoCloseable {
      * @return true, если была отменена хотя бы одна подписка. Если подписок с указанным слушателем не было найдено,
      * тогда вернет false.
      */
-    @SneakyThrows
     public boolean unsubscribe(JedisPubSubListener listener) {
         lock.lock();
         try {
@@ -300,6 +271,8 @@ public class JedisPubSubWrapper implements AutoCloseable {
      *     <li>Поток будет остановлен, который блокировала подписка.</li>
      * </ul>
      *
+     * <p>Этот метод блокирует поток, пока внутренняя подписка {@link JedisPubSub} не будет полностью отменена.
+     *
      * <p>Этот метод является идемпотентным, повторный его вызов не приведет к ошибке, а просто будет проигнорирован.
      */
     @Override
@@ -313,13 +286,16 @@ public class JedisPubSubWrapper implements AutoCloseable {
             try {
                 if (pubSub != null) {
                     pubSub.unsubscribe();
+                    while (pubSub.isSubscribed()) {
+                        if (!unsubscribed.await(10, TimeUnit.SECONDS)) {
+                            throw new TimeoutException("Таймаут ожидания отмены подписки pubSub.");
+                        }
+                    }
                 }
             } catch (Exception e) {
                 log.severe("Unsubscribe " + this.getClass().getSimpleName() + " exception, " +
-                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".");
+                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".close().");
                 e.printStackTrace();
-            } finally {
-                pubSub = null;
             }
 
             try {
@@ -328,13 +304,49 @@ public class JedisPubSubWrapper implements AutoCloseable {
                 }
             } catch (Exception e) {
                 log.severe("Interrupt thread " + this.getClass().getSimpleName() + " exception, " +
-                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".");
+                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".close().");
                 e.printStackTrace();
-            } finally {
-                thread = null;
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    private class PubSub extends JedisPubSub {
+        @Override
+        public void onMessage(String channel, String message) {
+            callListeners(channel, message);
+        }
+
+        @Override
+        public void onSubscribe(String channel, int subscribedChannels) {
+            if (channel.equals(dummyChannel)) {
+                resubscribeCount++;
+                if (resubscribeCount > 1) {
+                    // вызывается в случае повторной регистрации подписки,
+                    // если предыдущая по какой-то причине оборвалась
+                    log.info("Подписка зарегистрирована заново в " + resubscribeCount + " раз.");
+                }
+
+                lock.lock();
+                try {
+                    subscribed.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+            }
+        }
+
+        @Override
+        public void onUnsubscribe(String channel, int subscribedChannels) {
+            if (!this.isSubscribed()) {
+                lock.lock();
+                try {
+                    unsubscribed.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+            }
         }
     }
 }

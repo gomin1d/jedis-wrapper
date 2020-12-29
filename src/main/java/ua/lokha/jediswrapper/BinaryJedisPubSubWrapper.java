@@ -56,6 +56,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      */
     private final Lock lock = new ReentrantLock();
     private final Condition subscribed = lock.newCondition();
+    private final Condition unsubscribed = lock.newCondition();
 
     /**
      * Используется для пометки этого ресурса как закрытого.
@@ -113,7 +114,6 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      *                 Метод слушателя {@link BinaryJedisPubSubListener#onMessage(byte[], byte[])} будет вызываться
      *                 именно в этом обработчике.
      */
-    @SneakyThrows
     public BinaryJedisPubSubWrapper(Pool<Jedis> pool, Executor executor) {
         this.pool = pool;
         this.executor = executor;
@@ -124,31 +124,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                     lock.lock();
                     byte[][] channels;
                     try {
-                        pubSub = new BinaryJedisPubSub() {
-                            @Override
-                            public void onMessage(byte[] channel, byte[] message) {
-                                callListeners(channel, message);
-                            }
-
-                            @Override
-                            public void onSubscribe(byte[] channel, int subscribedChannels) {
-                                if (Arrays.equals(channel, dummyChannel)) {
-                                    resubscribeCount++;
-                                    if (resubscribeCount > 1) {
-                                        // вызывается в случае повторной регистрации подписки,
-                                        // если предыдущая по какой-то причине оборвалась
-                                        log.info("Подписка зарегистрирована заново в " + resubscribeCount + " раз.");
-                                    }
-
-                                    lock.lock();
-                                    try {
-                                        subscribed.signalAll();
-                                    } finally {
-                                        lock.unlock();
-                                    }
-                                }
-                            }
-                        };
+                        pubSub = new PubSub();
 
                         channels = new byte[subscribes.size() + 1][];
                         channels[0] = dummyChannel;
@@ -192,7 +168,6 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      * @return слушатель, переданный параметром {@code listener}. Он выступает индентификатором подписки,
      * с помощью слушателя можно отменить подписку методом {@link #unsubscribe(BinaryJedisPubSubListener)}.
      */
-    @SneakyThrows
     public BinaryJedisPubSubListener subscribe(byte[] channel, BinaryJedisPubSubListener listener) {
         lock.lock();
         try {
@@ -223,7 +198,6 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      * @return true, если была отменена хотя бы одна подписка. Если подписок с указанным слушателем не было найдено,
      * тогда вернет false.
      */
-    @SneakyThrows
     public boolean unsubscribe(BinaryJedisPubSubListener listener) {
         lock.lock();
         try {
@@ -301,6 +275,8 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      *     <li>Поток будет остановлен, который блокировала подписка.</li>
      * </ul>
      *
+     * <p>Этот метод блокирует поток, пока внутренняя подписка {@link BinaryJedisPubSub} не будет полностью отменена.
+     *
      * <p>Этот метод является идемпотентным, повторный его вызов не приведет к ошибке, а просто будет проигнорирован.
      */
     @Override
@@ -314,13 +290,16 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
             try {
                 if (pubSub != null) {
                     pubSub.unsubscribe();
+                    while (pubSub.isSubscribed()) {
+                        if (!unsubscribed.await(10, TimeUnit.SECONDS)) {
+                            throw new TimeoutException("Таймаут ожидания отмены подписки pubSub.");
+                        }
+                    }
                 }
             } catch (Exception e) {
                 log.severe("Unsubscribe " + this.getClass().getSimpleName() + " exception, " +
-                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".");
+                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".close().");
                 e.printStackTrace();
-            } finally {
-                pubSub = null;
             }
 
             try {
@@ -329,13 +308,49 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                 }
             } catch (Exception e) {
                 log.severe("Interrupt thread " + this.getClass().getSimpleName() + " exception, " +
-                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".");
+                    "ignore this exception for idempotency of " + this.getClass().getSimpleName() + ".close().");
                 e.printStackTrace();
-            } finally {
-                thread = null;
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    private class PubSub extends BinaryJedisPubSub {
+        @Override
+        public void onMessage(byte[] channel, byte[] message) {
+            callListeners(channel, message);
+        }
+
+        @Override
+        public void onSubscribe(byte[] channel, int subscribedChannels) {
+            if (Arrays.equals(channel, dummyChannel)) {
+                resubscribeCount++;
+                if (resubscribeCount > 1) {
+                    // вызывается в случае повторной регистрации подписки,
+                    // если предыдущая по какой-то причине оборвалась
+                    log.info("Подписка зарегистрирована заново в " + resubscribeCount + " раз.");
+                }
+
+                lock.lock();
+                try {
+                    subscribed.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+            }
+        }
+
+        @Override
+        public void onUnsubscribe(byte[] channel, int subscribedChannels) {
+            if (!this.isSubscribed()) {
+                lock.lock();
+                try {
+                    unsubscribed.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+            }
         }
     }
 }
