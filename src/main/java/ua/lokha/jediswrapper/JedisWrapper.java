@@ -45,9 +45,12 @@ import java.util.Set;
  * <p>{@code JedisWrapper} не поддерживает pipeline {@link Jedis#pipelined()} и транзации {@link Jedis#multi()}.
  * Если вам необходим этот функционал, пользуйтесь обычным {@link JedisPool} + {@link Jedis}.
  */
-public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedisCommands, MultiKeyBinaryCommands{
+public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedisCommands, MultiKeyBinaryCommands,
+    AutoCloseable {
 
 	private Pool<Jedis> pool;
+	private JedisPubSubWrapper pubSubWrapper;
+	private BinaryJedisPubSubWrapper binaryPubSubWrapper;
 
     /**
      * @param pool пул соединений Jedis.
@@ -56,6 +59,9 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
      */
 	public JedisWrapper(Pool<Jedis> pool){
 		this.pool = pool;
+
+		this.pubSubWrapper = new JedisPubSubWrapper(pool);
+		this.binaryPubSubWrapper = new BinaryJedisPubSubWrapper(pool);
 	}
 
 	/**
@@ -2742,13 +2748,41 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 	}
 
     /**
-     * @deprecated не рекомендуется к использованию, есть альтернатива {@link Redis#binarySubscribe(byte[], BinaryJedisPubSubListener)}.
-     * Разница стандартного метода с альтернативой:
-     * <ul>
-     *     <li>Стандартный метод на каждую подписку выделяет целый поток, альтернатива использует общий один поток.</li>
-     *     <li>После перезагрузи сервиса {@link RedisService} стандартные подписки обрываются, а альтернативные
-     *     возобновляют свою работу с новым соединением.</li>
-     * </ul>
+     * Подписаться на прослушивание каналов.
+     *
+     * <p>Этот метод является альтернативой использованию стандартного метода {@link #subscribe(BinaryJedisPubSub, byte[]...)},
+     * и рекомендуется к использованию. Этот метод создает подписку с помощью обертки {@link BinaryJedisPubSubWrapper},
+     * о преимуществах которой можете почитать в ее javadoc.
+     *
+     * @param listener слушатель, который будет вызываться, когда будет приходить сообщение на указанные каналы.
+     * @param channels имя каналов.
+     * @return слушатель, переданный параметром {@code listener}. Он выступает индентификатором подписки,
+     * с помощью слушателя можно отменить подписку методом {@link #unsubscribe(BinaryJedisPubSubListener)}.
+     */
+    public BinaryJedisPubSubListener subscribe(BinaryJedisPubSubListener listener, byte[]... channels){
+        for (byte[] channel : channels) {
+            binaryPubSubWrapper.subscribe(channel, listener);
+        }
+        return listener;
+    }
+
+    /**
+     * Отменить подписку по указанному слушателю.
+     *
+     * @param listener слушатель, используемый в подписках, которые должны быть отменены.
+     *                 Если этот слушатель использовался для прослушивания нескольких каналов, тогда все эти
+     *                 подписки будут отменены.
+     * @return true, если была отменена хотя бы одна подписка. Если подписок с указанным слушателем не было найдено,
+     * тогда вернет false.
+     */
+    public boolean unsubscribe(BinaryJedisPubSubListener listener) {
+        return binaryPubSubWrapper.unsubscribe(listener);
+    }
+
+    /**
+     * @deprecated не рекомендуется к использованию, есть альтернативный метод {@link #subscribe(BinaryJedisPubSubListener, byte[]...)}.
+     * Этот альтернативный метод создает подписку с помощью обертки {@link BinaryJedisPubSubWrapper},  о преимуществах
+     * которой можете почитать в ее javadoc.
      */
 	@Deprecated
 	@Override
@@ -2758,16 +2792,6 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
         }
 	}
 
-    /**
-     * @deprecated не рекомендуется к использованию, есть альтернатива {@link Redis#binarySubscribe(byte[], BinaryJedisPubSubListener)}.
-     * Разница стандартного метода с альтернативой:
-     * <ul>
-     *     <li>Стандартный метод на каждую подписку выделяет целый поток, альтернатива использует общий один поток.</li>
-     *     <li>После перезагрузи сервиса {@link RedisService} стандартные подписки обрываются, а альтернативные
-     *     возобновляют свою работу с новым соединением.</li>
-     * </ul>
-     */
-    @Deprecated
 	@Override
 	public void psubscribe(BinaryJedisPubSub jedisPubSub, byte[]... patterns){
         try(Jedis jedis = pool.getResource()){
@@ -5716,13 +5740,41 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 	}
 
     /**
-     * @deprecated не рекомендуется к использованию, есть альтернатива {@link Redis#subscribe(String, JedisPubSubListener)}.
-     * Разница стандартного метода с альтернативой:
-     * <ul>
-     *     <li>Стандартный метод на каждую подписку выделяет целый поток, альтернатива использует общий один поток.</li>
-     *     <li>После перезагрузи сервиса {@link RedisService} стандартные подписки обрываются, а альтернативные
-     *     возобновляют свою работу с новым соединением.</li>
-     * </ul>
+     * Подписаться на прослушивание каналов.
+     *
+     * <p>Этот метод является альтернативой использованию стандартного метода {@link #subscribe(JedisPubSub, String...)},
+     * и рекомендуется к использованию. Этот метод создает подписку с помощью обертки {@link JedisPubSubWrapper},
+     * о преимуществах которой можете почитать в ее javadoc.
+     *
+     * @param listener слушатель, который будет вызываться, когда будет приходить сообщение на указанные каналы.
+     * @param channels имя каналов.
+     * @return слушатель, переданный параметром {@code listener}. Он выступает индентификатором подписки,
+     * с помощью слушателя можно отменить подписку методом {@link #unsubscribe(JedisPubSubListener)}.
+     */
+    public JedisPubSubListener subscribe(JedisPubSubListener listener, String... channels){
+        for (String channel : channels) {
+            pubSubWrapper.subscribe(channel, listener);
+        }
+        return listener;
+    }
+
+    /**
+     * Отменить подписку по указанному слушателю.
+     *
+     * @param listener слушатель, используемый в подписках, которые должны быть отменены.
+     *                 Если этот слушатель использовался для прослушивания нескольких каналов, тогда все эти
+     *                 подписки будут отменены.
+     * @return true, если была отменена хотя бы одна подписка. Если подписок с указанным слушателем не было найдено,
+     * тогда вернет false.
+     */
+    public boolean unsubscribe(JedisPubSubListener listener) {
+        return pubSubWrapper.unsubscribe(listener);
+    }
+
+    /**
+     * @deprecated не рекомендуется к использованию, есть альтернативный метод {@link #subscribe(JedisPubSubListener, String...)}.
+     * Этот альтернативный метод создает подписку с помощью обертки {@link JedisPubSubWrapper},  о преимуществах
+     * которой можете почитать в ее javadoc.
      */
     @Deprecated
 	@Override
@@ -5732,16 +5784,6 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
         }
 	}
 
-    /**
-     * @deprecated не рекомендуется к использованию, есть альтернатива {@link Redis#subscribe(String, JedisPubSubListener)}.
-     * Разница стандартного метода с альтернативой:
-     * <ul>
-     *     <li>Стандартный метод на каждую подписку выделяет целый поток, альтернатива использует общий один поток.</li>
-     *     <li>После перезагрузи сервиса {@link RedisService} стандартные подписки обрываются, а альтернативные
-     *     возобновляют свою работу с новым соединением.</li>
-     * </ul>
-     */
-    @Deprecated
 	@Override
 	public void psubscribe(JedisPubSub jedisPubSub, String... patterns){
         try(Jedis jedis = pool.getResource()){
@@ -6105,4 +6147,14 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
             return jedis.hstrlen(key, field);
         }
 	}
+
+    @Override
+    public void close() throws Exception {
+	    // методы close из pubSubWrapper и binaryPubSubWrapper
+        // являются идемпотентными и не кидают исключений
+        // по этому их можно просто закрывать без дополнительных проверок
+        // и try catch блоков
+        pubSubWrapper.close();
+        binaryPubSubWrapper.close();
+    }
 }

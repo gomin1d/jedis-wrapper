@@ -102,10 +102,22 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
     private int resubscribeCount = 0;
 
     /**
-     * Работает так же, как и {@link JedisPubSubWrapper#JedisPubSubWrapper(Pool, Executor, boolean)}.
+     * Работает так же, как и {@link #BinaryJedisPubSubWrapper(Pool, Executor, boolean)}.
+     * <p>Для параметра {@code executor} задается значение по умолчанию {@code Runnable::run}, что означает
+     * обрабатывать сообщения в потоке подписки.
+     * <p>Для параметра {@code lazyInit} задается значение по умолчанию {@code true}.
+     *
+     * @see #BinaryJedisPubSubWrapper(Pool, Executor, boolean)
+     */
+    public BinaryJedisPubSubWrapper(Pool<Jedis> pool) {
+        this(pool, Runnable::run, true);
+    }
+
+    /**
+     * Работает так же, как и {@link #BinaryJedisPubSubWrapper(Pool, Executor, boolean)}.
      * Для параметра {@code lazyInit} задается значение по умолчанию {@code true}.
      *
-     * @see JedisPubSubWrapper#JedisPubSubWrapper(Pool, Executor, boolean)
+     * @see #BinaryJedisPubSubWrapper(Pool, Executor, boolean)
      */
     public BinaryJedisPubSubWrapper(Pool<Jedis> pool, Executor executor) {
         this(pool, executor, true);
@@ -298,6 +310,8 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      * </ul>
      *
      * <p>Этот метод блокирует поток, пока внутренняя подписка {@link BinaryJedisPubSub} не будет полностью отменена.
+     *
+     * <p>Этот метод не будет освождать полученный через конструктор пул потоков {@link #getPool()}.
      *
      * <p>Этот метод является идемпотентным, повторный его вызов не приведет к ошибке, а просто будет проигнорирован.
      */
