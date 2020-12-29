@@ -75,7 +75,6 @@ public class JedisPubSubWrapper implements AutoCloseable {
     /**
      * Все подписки, ключем выступает имя канала, в значении список слушателей.
      */
-    @Getter
     private Map<String, Set<JedisPubSubListener>> subscribes = new HashMap<>();
 
     /**
@@ -372,6 +371,20 @@ public class JedisPubSubWrapper implements AutoCloseable {
                     lock.unlock();
                 }
             }
+        }
+    }
+
+    /**
+     * Все подписки, ключем выступает имя канала, в значении список слушателей.
+     */
+    public Map<String, Set<JedisPubSubListener>> getSubscribes() {
+        lock.lock();
+        try {
+            Map<String, Set<JedisPubSubListener>> copy = new HashMap<>();
+            subscribes.forEach((channel, listeners) -> copy.put(channel, new HashSet<>(listeners)));
+            return copy;
+        } finally {
+            lock.unlock();
         }
     }
 }

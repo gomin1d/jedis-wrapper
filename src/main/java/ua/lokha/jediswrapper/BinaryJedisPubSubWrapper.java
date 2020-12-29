@@ -79,7 +79,6 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
     /**
      * Все подписки, ключем выступает имя канала, в значении список слушателей.
      */
-    @Getter
     private Map<ByteArrayWrapper, Set<BinaryJedisPubSubListener>> subscribes = new HashMap<>();
 
     /**
@@ -374,6 +373,21 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                     lock.unlock();
                 }
             }
+        }
+    }
+
+
+    /**
+     * Все подписки, ключем выступает имя канала, в значении список слушателей.
+     */
+    public Map<ByteArrayWrapper, Set<BinaryJedisPubSubListener>> getSubscribes() {
+        lock.lock();
+        try {
+            Map<ByteArrayWrapper, Set<BinaryJedisPubSubListener>> copy = new HashMap<>();
+            subscribes.forEach((channel, listeners) -> copy.put(channel, new HashSet<>(listeners)));
+            return copy;
+        } finally {
+            lock.unlock();
         }
     }
 }
