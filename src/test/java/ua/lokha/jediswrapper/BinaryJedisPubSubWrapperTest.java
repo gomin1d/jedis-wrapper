@@ -31,6 +31,39 @@ public class BinaryJedisPubSubWrapperTest {
     }
 
     @Test
+    public void notLazyInit() throws Exception {
+        try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run, false)) {
+            Assert.assertNotNull(wrapper.getThread());
+            Assert.assertNotNull(wrapper.getPubSub());
+            Assert.assertTrue(wrapper.getResubscribeCount() > 0);
+        }
+    }
+
+    @Test
+    public void lazyInit() throws Exception {
+        try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run, true)) {
+            Assert.assertNull(wrapper.getThread());
+            Assert.assertNull(wrapper.getPubSub());
+            Assert.assertEquals(0, wrapper.getResubscribeCount());
+
+            BinaryJedisPubSubListener listener = (channel, message) -> {
+            };
+            wrapper.unsubscribe(listener); // еще не зарегистрирован
+
+            // unsubscribe не должен был вызвать инициализацию
+            Assert.assertNull(wrapper.getThread());
+            Assert.assertNull(wrapper.getPubSub());
+            Assert.assertEquals(0, wrapper.getResubscribeCount());
+
+            wrapper.subscribe("channel-name".getBytes(StandardCharsets.UTF_8), listener);
+
+            Assert.assertNotNull(wrapper.getThread());
+            Assert.assertNotNull(wrapper.getPubSub());
+            Assert.assertTrue(wrapper.getResubscribeCount() > 0);
+        }
+    }
+
+    @Test
     public void resubscribed() throws Exception {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
             wrapper.subscribe("channel-name".getBytes(StandardCharsets.UTF_8), (channel, message) -> {
@@ -60,7 +93,7 @@ public class BinaryJedisPubSubWrapperTest {
 
     @Test
     public void unsubscribed() throws Exception {
-        BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run);
+        BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run, false);
         Assert.assertTrue(wrapper.getPubSub().isSubscribed());
         Assert.assertTrue(wrapper.getThread().isAlive());
         Assert.assertFalse(wrapper.getThread().isInterrupted());

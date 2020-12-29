@@ -99,20 +99,51 @@ public class JedisPubSubWrapper implements AutoCloseable {
     private int resubscribeCount = 0;
 
     /**
-     * Конструктор блокирует поток, пока подписка не будет полностью создана и готова к использованию.
-     * После завершения работы конструктора можно сразу же подписываться на канал с помощью метода
-     * {@link #subscribe(String, JedisPubSubListener)}.
+     * Работает так же, как и {@link JedisPubSubWrapper#JedisPubSubWrapper(Pool, Executor, boolean)}.
+     * Для параметра {@code lazyInit} задается значение по умолчанию {@code true}.
      *
-     * @param pool пул соединений с Redis.
-     *             Поскольку эта обертка умеет возобновлять подписку в случае ошибки, нужен именно пул соединений,
-     *             а не конкретное соединиение.
-     * @param executor обработчик, в котором будет вызываться обработка сообщений, приходящих на канал подписки.
-     *                 Метод слушателя {@link JedisPubSubListener#onMessage(String, String)} будет вызываться
-     *                 именно в этом обработчике.
+     * @see JedisPubSubWrapper#JedisPubSubWrapper(Pool, Executor, boolean)
      */
     public JedisPubSubWrapper(Pool<Jedis> pool, Executor executor) {
+        this(pool, executor, true);
+    }
+
+    /**
+     * Создание обертки над {@link JedisPubSub}.
+     *
+     * @param pool     пул соединений с Redis.
+     *                 Поскольку эта обертка умеет возобновлять подписку в случае ошибки, нужен именно пул соединений,
+     *                 а не конкретное соединиение.
+     * @param executor обработчик, в котором будет вызываться обработка сообщений, приходящих на канал подписки.
+     *                 Метод слушателя {@link JedisPubSubListener#onMessage(String, String)} будет вызываться
+     * @param lazyInit ленивая инициализация. Если указать значение {@code true}, тогда инициализация будет перенесена до
+     *                 первого вызова {@link #subscribe(String, JedisPubSubListener)}, если {@code false}, тогда
+     *                 инициализация будет вызвана в конструкторе. В инициализацию входит создание подписки PubSub,
+     *                 создание потока для этой подписки и ожидание полной готовности подписки.
+     */
+    public JedisPubSubWrapper(Pool<Jedis> pool, Executor executor, boolean lazyInit) {
         this.pool = pool;
         this.executor = executor;
+
+        if (!lazyInit) {
+            this.lazyInit();
+
+            lock.lock();
+            try {
+                this.awaitSubscribed();
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    /**
+     * Выполнить инициализацию, если она еще не выполнена
+     */
+    private void lazyInit() {
+        if (thread != null) {
+            return; // уже проинициализировано
+        }
 
         thread = new Thread(() -> {
             while (!(closed || Thread.currentThread().isInterrupted() || pool.isClosed())) {
@@ -147,13 +178,6 @@ public class JedisPubSubWrapper implements AutoCloseable {
         }, this.getClass().getSimpleName() + " Thread");
 
         thread.start();
-
-        lock.lock();
-        try {
-            this.awaitSubscribed();
-        } finally {
-            lock.unlock();
-        }
     }
 
     /**
@@ -168,6 +192,7 @@ public class JedisPubSubWrapper implements AutoCloseable {
         lock.lock();
         try {
             this.checkForClosed();
+            this.lazyInit();
             this.awaitSubscribed();
             subscribes.computeIfAbsent(channel, key -> {
                 try {
@@ -202,7 +227,7 @@ public class JedisPubSubWrapper implements AutoCloseable {
                 if (setEntry.getValue().remove(listener)) {
                     log.info("Отписали от канала " + setEntry.getKey() +
                         " listener: " + listener);
-                    if (setEntry.getValue().isEmpty()) {
+                    if (setEntry.getValue().isEmpty() && pubSub != null) {
                         try {
                             pubSub.unsubscribe(setEntry.getKey());
                         } catch (Exception e) {

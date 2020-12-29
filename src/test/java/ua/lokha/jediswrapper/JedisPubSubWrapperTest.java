@@ -29,6 +29,39 @@ public class JedisPubSubWrapperTest {
     }
 
     @Test
+    public void notLazyInit() throws Exception {
+        try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run, false)) {
+            Assert.assertNotNull(wrapper.getThread());
+            Assert.assertNotNull(wrapper.getPubSub());
+            Assert.assertTrue(wrapper.getResubscribeCount() > 0);
+        }
+    }
+
+    @Test
+    public void lazyInit() throws Exception {
+        try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run, true)) {
+            Assert.assertNull(wrapper.getThread());
+            Assert.assertNull(wrapper.getPubSub());
+            Assert.assertEquals(0, wrapper.getResubscribeCount());
+
+            JedisPubSubListener listener = (channel, message) -> {
+            };
+            wrapper.unsubscribe(listener); // еще не зарегистрирован
+
+            // unsubscribe не должен был вызвать инициализацию
+            Assert.assertNull(wrapper.getThread());
+            Assert.assertNull(wrapper.getPubSub());
+            Assert.assertEquals(0, wrapper.getResubscribeCount());
+
+            wrapper.subscribe("channel-name", listener);
+
+            Assert.assertNotNull(wrapper.getThread());
+            Assert.assertNotNull(wrapper.getPubSub());
+            Assert.assertTrue(wrapper.getResubscribeCount() > 0);
+        }
+    }
+
+    @Test
     public void resubscribed() throws Exception {
         try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run)) {
             wrapper.subscribe("channel-name", (channel, message) -> {
@@ -58,7 +91,7 @@ public class JedisPubSubWrapperTest {
 
     @Test
     public void unsubscribed() throws Exception {
-        JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run);
+        JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run, false);
         Assert.assertTrue(wrapper.getPubSub().isSubscribed());
         Assert.assertTrue(wrapper.getThread().isAlive());
         Assert.assertFalse(wrapper.getThread().isInterrupted());

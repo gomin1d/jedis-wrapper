@@ -103,9 +103,17 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
     private int resubscribeCount = 0;
 
     /**
-     * Конструктор блокирует поток, пока подписка не будет полностью создана и готова к использованию.
-     * После завершения работы конструктора можно сразу же подписываться на канал с помощью метода
-     * {@link #subscribe(byte[], BinaryJedisPubSubListener)}.
+     * Работает так же, как и {@link JedisPubSubWrapper#JedisPubSubWrapper(Pool, Executor, boolean)}.
+     * Для параметра {@code lazyInit} задается значение по умолчанию {@code true}.
+     *
+     * @see JedisPubSubWrapper#JedisPubSubWrapper(Pool, Executor, boolean)
+     */
+    public BinaryJedisPubSubWrapper(Pool<Jedis> pool, Executor executor) {
+        this(pool, executor, true);
+    }
+
+    /**
+     * Создание обертки над {@link BinaryJedisPubSub}.
      *
      * @param pool пул соединений с Redis.
      *             Поскольку эта обертка умеет возобновлять подписку в случае ошибки, нужен именно пул соединений,
@@ -113,10 +121,31 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      * @param executor обработчик, в котором будет вызываться обработка сообщений, приходящих на канал подписки.
      *                 Метод слушателя {@link BinaryJedisPubSubListener#onMessage(byte[], byte[])} будет вызываться
      *                 именно в этом обработчике.
+     * @param lazyInit ленивая инициализация. Если указать значение {@code true}, тогда инициализация будет перенесена до
+     *                 первого вызова {@link #subscribe(byte[], BinaryJedisPubSubListener)}, если {@code false}, тогда
+     *                 инициализация будет вызвана в конструкторе. В инициализацию входит создание подписки PubSub,
+     *                 создание потока для этой подписки и ожидание полной готовности подписки.
      */
-    public BinaryJedisPubSubWrapper(Pool<Jedis> pool, Executor executor) {
+    public BinaryJedisPubSubWrapper(Pool<Jedis> pool, Executor executor, boolean lazyInit) {
         this.pool = pool;
         this.executor = executor;
+
+        if (!lazyInit) {
+            this.lazyInit();
+
+            lock.lock();
+            try {
+                this.awaitSubscribed();
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    private void lazyInit() {
+        if (thread != null) {
+            return; // уже проинициализировано
+        }
 
         thread = new Thread(() -> {
             while (!(closed || Thread.currentThread().isInterrupted() || pool.isClosed())) {
@@ -151,13 +180,6 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
         }, this.getClass().getSimpleName() + " Thread");
 
         thread.start();
-
-        lock.lock();
-        try {
-            this.awaitSubscribed();
-        } finally {
-            lock.unlock();
-        }
     }
 
     /**
@@ -172,6 +194,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
         lock.lock();
         try {
             this.checkForClosed();
+            this.lazyInit();
             this.awaitSubscribed();
             subscribes.computeIfAbsent(new ByteArrayWrapper(channel), key -> {
                 try {
@@ -206,7 +229,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                 if (setEntry.getValue().remove(listener)) {
                     log.info("Отписали от канала " + new String(setEntry.getKey().getBytes(), StandardCharsets.UTF_8) +
                         " listener: " + listener);
-                    if (setEntry.getValue().isEmpty()) {
+                    if (setEntry.getValue().isEmpty() && pubSub != null) {
                         try {
                             pubSub.unsubscribe(setEntry.getKey().getBytes());
                         } catch (Exception e) {
