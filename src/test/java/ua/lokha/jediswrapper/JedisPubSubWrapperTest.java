@@ -1,9 +1,9 @@
 package ua.lokha.jediswrapper;
 
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -14,10 +14,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class JedisPubSubWrapperTest {
-    private static JedisPool pool;
+    private JedisPool pool;
 
-    @BeforeClass
-    public static void beforeAll() {
+    @Before
+    public void beforeAll() {
         String host = RedisCredentials.host;
         int port = RedisCredentials.port;
         if (RedisCredentials.password == null) {
@@ -27,8 +27,8 @@ public class JedisPubSubWrapperTest {
         }
     }
 
-    @AfterClass
-    public static void afterAll() {
+    @After
+    public void afterAll() {
         pool.close();
     }
 

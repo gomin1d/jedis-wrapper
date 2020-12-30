@@ -6,9 +6,9 @@ import org.apache.commons.pool2.PooledObjectState;
 import org.apache.commons.pool2.impl.DefaultPooledObjectInfo;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -24,10 +24,10 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
 
 public class JedisWrapperTest {
-    private static JedisPool pool;
+    private JedisPool pool;
 
-    @BeforeClass
-    public static void beforeAll() {
+    @Before
+    public void beforeAll() {
         String host = RedisCredentials.host;
         int port = RedisCredentials.port;
         if (RedisCredentials.password == null) {
@@ -37,8 +37,8 @@ public class JedisWrapperTest {
         }
     }
 
-    @AfterClass
-    public static void afterAll() {
+    @After
+    public void afterAll() {
         pool.close();
     }
 
