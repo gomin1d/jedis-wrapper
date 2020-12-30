@@ -12,6 +12,7 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
 
 /**
  * {@code JedisWrapper} это оболочка для {@link Jedis} + {@link JedisPool}. {@code JedisWrapper} служит для
@@ -45,8 +46,10 @@ import java.util.Set;
  * <p>{@code JedisWrapper} эффективно использовать с настоенным {@link JedisPool}, в таком случае реальные соединения
  * не будут создаваться/закрываться, вместо этого они будут браться и возвращаться в пул соединений.
  *
- * <p>{@code JedisWrapper} не поддерживает pipeline {@link Jedis#pipelined()} и транзации {@link Jedis#multi()}.
- * Если вам необходим этот функционал, пользуйтесь обычным {@link JedisPool} + {@link Jedis}.
+ * <p>{@code JedisWrapper} поддерживает pipeline {@link #pipelined()} и транзации {@link #multi()}.
+ *
+ * <p>В {@code JedisWrapper} встроены улучшенные подписки {@link #subscribe(JedisPubSubListener, String...)} и
+ * {@link #subscribe(BinaryJedisPubSubListener, byte[]...)}.
  */
 public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedisCommands, MultiKeyBinaryCommands,
     AutoCloseable {
@@ -70,15 +73,27 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 	private BinaryJedisPubSubWrapper binaryPubSubWrapper;
 
     /**
+     * Работает так же, как и {@link #JedisWrapper(Pool, Executor)}.
+     * <p>Для параметра {@code executor} задается значение по умолчанию {@code Runnable::run}, что означает
+     * обрабатывать сообщения в потоке подписки.
+     */
+	public JedisWrapper(Pool<Jedis> pool) {
+        this(pool, Runnable::run);
+    }
+
+    /**
      * @param pool пул соединений Redis.
      *             <p>{@code JedisWrapper} эффективно использовать с настоенным {@link JedisPool}, в таком случае реальные соединения
      *             не будут создаваться/закрываться, вместо этого они будут браться и возвращаться в пул соединений.
+     * @param executor обработчик, в котором будет вызываться обработка сообщений, приходящих на канал подписки.
+     *                 Метод слушателя {@link JedisPubSubListener#onMessage(String, String)} будет вызываться
+     *                 именно в этом обработчике.
      */
-	public JedisWrapper(Pool<Jedis> pool){
+	public JedisWrapper(Pool<Jedis> pool, Executor executor){
 		this.pool = pool;
 
-		this.pubSubWrapper = new JedisPubSubWrapper(pool);
-		this.binaryPubSubWrapper = new BinaryJedisPubSubWrapper(pool);
+		this.pubSubWrapper = new JedisPubSubWrapper(pool, executor);
+		this.binaryPubSubWrapper = new BinaryJedisPubSubWrapper(pool, executor);
 	}
 
 
@@ -150,7 +165,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
      *
      * <p>Пример использования:
      * <pre>
-     *     JedisWrapper jedisWrapper;
+     *     JedisWrapper jedisWrapper = ...;
      *     try (JedisPipeline pipeline = jedisWrapper.pipelined()) {
      *         Response<String> response1 = pipeline.get("key1");
      *         Response<String> response2 = pipeline.get("key2");

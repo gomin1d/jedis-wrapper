@@ -127,6 +127,7 @@ public class JedisPubSubWrapper implements AutoCloseable {
      *                 а не конкретное соединиение.
      * @param executor обработчик, в котором будет вызываться обработка сообщений, приходящих на канал подписки.
      *                 Метод слушателя {@link JedisPubSubListener#onMessage(String, String)} будет вызываться
+     *                 именно в этом обработчике.
      * @param lazyInit ленивая инициализация. Если указать значение {@code true}, тогда инициализация будет перенесена до
      *                 первого вызова {@link #subscribe(JedisPubSubListener, String)}, если {@code false}, тогда
      *                 инициализация будет вызвана в конструкторе. В инициализацию входит создание подписки PubSub,
