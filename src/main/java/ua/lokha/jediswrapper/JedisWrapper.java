@@ -1,12 +1,14 @@
 package ua.lokha.jediswrapper;
 
 import lombok.Getter;
+import lombok.Lombok;
 import redis.clients.jedis.*;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.jedis.params.sortedset.ZIncrByParams;
 import redis.clients.util.Pool;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,6 +80,37 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 		this.pubSubWrapper = new JedisPubSubWrapper(pool);
 		this.binaryPubSubWrapper = new BinaryJedisPubSubWrapper(pool);
 	}
+
+	private static Field jedisPipelineField;
+
+	static {
+	    try {
+	        jedisPipelineField = BinaryJedis.class.getDeclaredField("pipeline");
+	        jedisPipelineField.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            Lombok.sneakyThrow(e);
+        }
+    }
+
+    public JedisPipeline pipelined() {
+        Jedis jedis = null;
+        JedisPipeline pipeline = null;
+        try {
+            jedis = pool.getResource();
+            pipeline = new JedisPipeline(jedis);
+            jedisPipelineField.set(jedis, pipeline);
+            pipeline.setClient(jedis.getClient());
+        } catch (Exception e) {
+            if (jedis != null) {
+                try {
+                    jedis.close();
+                } catch (Exception ignored) {
+                }
+            }
+            Lombok.sneakyThrow(e);
+        }
+        return pipeline;
+    }
 
 	/**
 	 * Set the string value as value of the key. The string can't be longer than 1073741824 bytes (1
