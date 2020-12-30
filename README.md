@@ -1,4 +1,4 @@
-### JedisWrapper
+## JedisWrapper
 
 JedisWrapper - это обертка для библиотеки <https://github.com/redis/jedis>.
 
@@ -90,7 +90,11 @@ jedisWrapper.subscribe((channel, message) -> {
 ресурсом `Jedis`.
 *  Уменьшение количества кода.
 
-### API
+## Быстрый старт
+
+Получить зависимость в вашей системе сборки: <https://jitpack.io/#lokha/jedis-wrapper/>
+
+## API
 
 Точкой входа в API является класс `JedisWrapper`, который является оберткой и требует для своего 
 создания `JedisPool`:
