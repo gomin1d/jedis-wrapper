@@ -22,7 +22,11 @@ public class BinaryJedisPubSubWrapperTest {
     public static void beforeAll() {
         String host = RedisCredentials.host;
         int port = RedisCredentials.port;
-        pool = new JedisPool(new GenericObjectPoolConfig(), host, port, 30000);
+        if (RedisCredentials.password == null) {
+            pool = new JedisPool(new GenericObjectPoolConfig(), host, port, 30000);
+        } else {
+            pool = new JedisPool(new GenericObjectPoolConfig(), host, port, 30000, RedisCredentials.password);
+        }
     }
 
     @AfterClass
@@ -55,7 +59,7 @@ public class BinaryJedisPubSubWrapperTest {
             Assert.assertNull(wrapper.getPubSub());
             Assert.assertEquals(0, wrapper.getResubscribeCount());
 
-            wrapper.subscribe("channel-name".getBytes(StandardCharsets.UTF_8), listener);
+            wrapper.subscribe(listener, "channel-name".getBytes(StandardCharsets.UTF_8));
 
             Assert.assertNotNull(wrapper.getThread());
             Assert.assertNotNull(wrapper.getPubSub());
@@ -66,8 +70,8 @@ public class BinaryJedisPubSubWrapperTest {
     @Test
     public void resubscribed() throws Exception {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
-            wrapper.subscribe("channel-name".getBytes(StandardCharsets.UTF_8), (channel, message) -> {
-            });
+            wrapper.subscribe((channel, message) -> {
+            }, "channel-name".getBytes(StandardCharsets.UTF_8));
 
             BinaryJedisPubSub previously = wrapper.getPubSub();
             previously.unsubscribe();
@@ -107,8 +111,8 @@ public class BinaryJedisPubSubWrapperTest {
     @Test
     public void subAndUnsub() throws Exception {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
-            BinaryJedisPubSubListener listener = wrapper.subscribe("channel-name".getBytes(StandardCharsets.UTF_8), (channel, message) -> {
-            });
+            BinaryJedisPubSubListener listener = wrapper.subscribe((channel, message) -> {
+            }, "channel-name".getBytes(StandardCharsets.UTF_8));
             Set<BinaryJedisPubSubListener> listeners = wrapper.getSubscribes().get(new ByteArrayWrapper("channel-name".getBytes(StandardCharsets.UTF_8)));
             Assert.assertNotNull(listeners);
             Assert.assertTrue(listeners.contains(listener));
@@ -126,11 +130,11 @@ public class BinaryJedisPubSubWrapperTest {
     public void subAndPub() throws Exception {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
             CountDownLatch latch = new CountDownLatch(1);
-            wrapper.subscribe("channel-name".getBytes(StandardCharsets.UTF_8), (channel, message) -> {
+            wrapper.subscribe((channel, message) -> {
                 if (Arrays.equals(message, "message".getBytes(StandardCharsets.UTF_8))) {
                     latch.countDown();
                 }
-            });
+            }, "channel-name".getBytes(StandardCharsets.UTF_8));
             try (Jedis jedis = pool.getResource()) {
                 jedis.publish("channel-name", "message");
             }

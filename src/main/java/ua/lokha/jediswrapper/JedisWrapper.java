@@ -1,5 +1,6 @@
 package ua.lokha.jediswrapper;
 
+import lombok.Getter;
 import redis.clients.jedis.*;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.jedis.params.sortedset.ZAddParams;
@@ -48,12 +49,26 @@ import java.util.Set;
 public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedisCommands, MultiKeyBinaryCommands,
     AutoCloseable {
 
+    /**
+     * Получить пул соединений Redis, который был передан в конструктор этого класса.
+     */
+    @Getter
 	private Pool<Jedis> pool;
+
+    /**
+     * Получить обертку для PubSub подписок {@link JedisPubSub}.
+     */
+    @Getter
 	private JedisPubSubWrapper pubSubWrapper;
+
+    /**
+     * Получить обертку для PubSub подписок {@link BinaryJedisPubSub}.
+     */
+    @Getter
 	private BinaryJedisPubSubWrapper binaryPubSubWrapper;
 
     /**
-     * @param pool пул соединений Jedis.
+     * @param pool пул соединений Redis.
      *             <p>{@code JedisWrapper} эффективно использовать с настоенным {@link JedisPool}, в таком случае реальные соединения
      *             не будут создаваться/закрываться, вместо этого они будут браться и возвращаться в пул соединений.
      */
@@ -2750,9 +2765,10 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
     /**
      * Подписаться на прослушивание каналов.
      *
-     * <p>Этот метод является альтернативой использованию стандартного метода {@link #subscribe(BinaryJedisPubSub, byte[]...)},
+     * <p>Этот метод является альтернативой метода {@link #subscribe(BinaryJedisPubSub, byte[]...)},
      * и рекомендуется к использованию. Этот метод создает подписку с помощью обертки {@link BinaryJedisPubSubWrapper},
-     * о преимуществах которой можете почитать в ее javadoc.
+     * о преимуществах которой можете почитать в ее javadoc. Ключевая особенность заключается в том, что этот метод
+     * не блокирует поток, что делает подписку легковесной.
      *
      * @param listener слушатель, который будет вызываться, когда будет приходить сообщение на указанные каналы.
      * @param channels имя каналов.
@@ -2761,7 +2777,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
      */
     public BinaryJedisPubSubListener subscribe(BinaryJedisPubSubListener listener, byte[]... channels){
         for (byte[] channel : channels) {
-            binaryPubSubWrapper.subscribe(channel, listener);
+            binaryPubSubWrapper.subscribe(listener, channel);
         }
         return listener;
     }
@@ -2780,8 +2796,9 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
     }
 
     /**
-     * @deprecated не рекомендуется к использованию, есть альтернативный метод {@link #subscribe(BinaryJedisPubSubListener, byte[]...)}.
-     * Этот альтернативный метод создает подписку с помощью обертки {@link BinaryJedisPubSubWrapper},  о преимуществах
+     * @deprecated не рекомендуется к использованию.
+     * Есть альтернативный метод {@link #subscribe(BinaryJedisPubSubListener, byte[]...)},
+     * который создает подписку с помощью обертки {@link BinaryJedisPubSubWrapper},  о преимуществах
      * которой можете почитать в ее javadoc.
      */
 	@Deprecated
@@ -5742,9 +5759,10 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
     /**
      * Подписаться на прослушивание каналов.
      *
-     * <p>Этот метод является альтернативой использованию стандартного метода {@link #subscribe(JedisPubSub, String...)},
+     * <p>Этот метод является альтернативой метода {@link #subscribe(JedisPubSub, String...)},
      * и рекомендуется к использованию. Этот метод создает подписку с помощью обертки {@link JedisPubSubWrapper},
-     * о преимуществах которой можете почитать в ее javadoc.
+     * о преимуществах которой можете почитать в ее javadoc. Ключевая особенность заключается в том, что этот метод
+     * не блокирует поток, что делает подписку легковесной.
      *
      * @param listener слушатель, который будет вызываться, когда будет приходить сообщение на указанные каналы.
      * @param channels имя каналов.
@@ -5753,7 +5771,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
      */
     public JedisPubSubListener subscribe(JedisPubSubListener listener, String... channels){
         for (String channel : channels) {
-            pubSubWrapper.subscribe(channel, listener);
+            pubSubWrapper.subscribe(listener, channel);
         }
         return listener;
     }
@@ -5772,8 +5790,9 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
     }
 
     /**
-     * @deprecated не рекомендуется к использованию, есть альтернативный метод {@link #subscribe(JedisPubSubListener, String...)}.
-     * Этот альтернативный метод создает подписку с помощью обертки {@link JedisPubSubWrapper},  о преимуществах
+     * @deprecated не рекомендуется к использованию.
+     * Есть альтернативный метод {@link #subscribe(JedisPubSubListener, String...)},
+     * который создает подписку с помощью обертки {@link JedisPubSubWrapper},  о преимуществах
      * которой можете почитать в ее javadoc.
      */
     @Deprecated
@@ -6149,7 +6168,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 	}
 
     @Override
-    public void close() throws Exception {
+    public void close() {
 	    // методы close из pubSubWrapper и binaryPubSubWrapper
         // являются идемпотентными и не кидают исключений
         // по этому их можно просто закрывать без дополнительных проверок

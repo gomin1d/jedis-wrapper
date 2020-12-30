@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock;
  *          но это неудобно. Большая часть разработчиков вообще не вникает в эту особенность и каждый раз создает новую подписку
  *          {@link BinaryJedisPubSub} для каждого канала. Обертка же внутри себя создает общую подписку {@link BinaryJedisPubSub},
  *          которая будет использоваться для всех каналов. Добавлять и удалять простушиваемые каналы можно легко с помощью
- *          методов {@link #subscribe(byte[], BinaryJedisPubSubListener)} и {@link #unsubscribe(BinaryJedisPubSubListener)}.
+ *          методов {@link #subscribe(BinaryJedisPubSubListener, byte[])} и {@link #unsubscribe(BinaryJedisPubSubListener)}.
  *          Внутри обертки создается отдельный поток для общей подписки {@link BinaryJedisPubSub}, который будет блокироваться
  *          вместо потока, в котором создается эта обертка.
  *     </li>
@@ -49,7 +49,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      * Канал-загрушка. В библиотеке Jedis для создания и работы подписки {@link BinaryJedisPubSub}
      * нужен минимум один канал, иначе будет ошибка.
      */
-    private static final byte[] dummyChannel = "jedis-dummy-fm2555tz7e".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] dummyChannel = "binary-jedis-pubsub-keep".getBytes(StandardCharsets.UTF_8);
 
     /**
      * Используется для поддержки многопоточности.
@@ -133,7 +133,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      *                 Метод слушателя {@link BinaryJedisPubSubListener#onMessage(byte[], byte[])} будет вызываться
      *                 именно в этом обработчике.
      * @param lazyInit ленивая инициализация. Если указать значение {@code true}, тогда инициализация будет перенесена до
-     *                 первого вызова {@link #subscribe(byte[], BinaryJedisPubSubListener)}, если {@code false}, тогда
+     *                 первого вызова {@link #subscribe(BinaryJedisPubSubListener, byte[])}, если {@code false}, тогда
      *                 инициализация будет вызвана в конструкторе. В инициализацию входит создание подписки PubSub,
      *                 создание потока для этой подписки и ожидание полной готовности подписки.
      */
@@ -196,12 +196,15 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
     /**
      * Подписаться на прослушивание канала.
      *
-     * @param channel имя канала.
+     * <p>В отличии от {@link Jedis#subscribe(BinaryJedisPubSub, byte[]...)}, этот метод не блокирует поток,
+     * что делает подписку легковесной.
+     *
      * @param listener слушатель, который будет вызываться, когда будет приходить сообщение на указанный канал.
+     * @param channel имя канала.
      * @return слушатель, переданный параметром {@code listener}. Он выступает индентификатором подписки,
      * с помощью слушателя можно отменить подписку методом {@link #unsubscribe(BinaryJedisPubSubListener)}.
      */
-    public BinaryJedisPubSubListener subscribe(byte[] channel, BinaryJedisPubSubListener listener) {
+    public BinaryJedisPubSubListener subscribe(BinaryJedisPubSubListener listener, byte[] channel) {
         lock.lock();
         try {
             this.checkForClosed();
@@ -216,7 +219,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                 }
                 return new HashSet<>(1);
             }).add(listener);
-            log.info("Подписали на канал " + new String(channel, StandardCharsets.UTF_8) + " listener: " + listener);
+            log.info("Подписали на канал '" + new String(channel, StandardCharsets.UTF_8) + "' listener: " + listener);
             return listener;
         } finally {
             lock.unlock();

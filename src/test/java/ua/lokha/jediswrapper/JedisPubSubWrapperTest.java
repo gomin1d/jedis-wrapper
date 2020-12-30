@@ -20,7 +20,11 @@ public class JedisPubSubWrapperTest {
     public static void beforeAll() {
         String host = RedisCredentials.host;
         int port = RedisCredentials.port;
-        pool = new JedisPool(new GenericObjectPoolConfig(), host, port, 30000);
+        if (RedisCredentials.password == null) {
+            pool = new JedisPool(new GenericObjectPoolConfig(), host, port, 30000);
+        } else {
+            pool = new JedisPool(new GenericObjectPoolConfig(), host, port, 30000, RedisCredentials.password);
+        }
     }
 
     @AfterClass
@@ -53,7 +57,7 @@ public class JedisPubSubWrapperTest {
             Assert.assertNull(wrapper.getPubSub());
             Assert.assertEquals(0, wrapper.getResubscribeCount());
 
-            wrapper.subscribe("channel-name", listener);
+            wrapper.subscribe(listener, "channel-name");
 
             Assert.assertNotNull(wrapper.getThread());
             Assert.assertNotNull(wrapper.getPubSub());
@@ -64,8 +68,8 @@ public class JedisPubSubWrapperTest {
     @Test
     public void resubscribed() throws Exception {
         try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run)) {
-            wrapper.subscribe("channel-name", (channel, message) -> {
-            });
+            wrapper.subscribe((channel, message) -> {
+            }, "channel-name");
 
             JedisPubSub previously = wrapper.getPubSub();
             previously.unsubscribe();
@@ -105,8 +109,8 @@ public class JedisPubSubWrapperTest {
     @Test
     public void subAndUnsub() throws Exception {
         try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run)) {
-            JedisPubSubListener listener = wrapper.subscribe("channel-name", (channel, message) -> {
-            });
+            JedisPubSubListener listener = wrapper.subscribe((channel, message) -> {
+            }, "channel-name");
             Set<JedisPubSubListener> listeners = wrapper.getSubscribes().get("channel-name");
             Assert.assertNotNull(listeners);
             Assert.assertTrue(listeners.contains(listener));
@@ -124,11 +128,11 @@ public class JedisPubSubWrapperTest {
     public void subAndPub() throws Exception {
         try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run)) {
             CountDownLatch latch = new CountDownLatch(1);
-            wrapper.subscribe("channel-name", (channel, message) -> {
+            wrapper.subscribe((channel, message) -> {
                 if (message.equals("message")) {
                     latch.countDown();
                 }
-            });
+            }, "channel-name");
             try (Jedis jedis = pool.getResource()) {
                 jedis.publish("channel-name", "message");
             }
