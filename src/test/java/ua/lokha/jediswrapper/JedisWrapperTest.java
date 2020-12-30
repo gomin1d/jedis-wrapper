@@ -151,6 +151,52 @@ public class JedisWrapperTest {
         }
     }
 
+    @Test
+    public void multiClose() {
+        try (JedisWrapper wrapper = new JedisWrapper(pool)) {
+            JedisTransaction transaction = wrapper.multi();
+
+            Jedis jedis = transaction.getJedis();
+            assertFalse(containsResourceInPool(jedis, wrapper.getPool()));
+
+            transaction.exec();
+            assertFalse(containsResourceInPool(jedis, wrapper.getPool()));
+
+            transaction.close();
+            assertTrue(containsResourceInPool(jedis, wrapper.getPool()));
+        }
+    }
+
+    @Test
+    public void multi() {
+        Random random = new Random();
+        Map<String, String> keyValue = new HashMap<>();
+        for (int i = 0; i < 5; i++) {
+            keyValue.put("key" + i, String.valueOf(random.nextInt(100000)));
+        }
+
+        try (JedisWrapper wrapper = new JedisWrapper(pool)) {
+            try (JedisTransaction transaction = wrapper.multi()) {
+                keyValue.forEach(transaction::set);
+                transaction.exec();
+            }
+        }
+
+        try (JedisWrapper wrapper = new JedisWrapper(pool)) {
+            try (JedisTransaction multi = wrapper.multi()) {
+                Map<String, Response<String>> result = new HashMap<>();
+                for (String key : keyValue.keySet()) {
+                    Response<String> response = multi.get(key);
+                    result.put(key, response);
+                }
+                multi.exec();
+                keyValue.forEach((key, value) -> {
+                    assertEquals(value, result.get(key).get());
+                });
+            }
+        }
+    }
+
     /**
      * Проверить, свободен ли ресурс {@link Jedis} для взятия из указанного пула.
      */

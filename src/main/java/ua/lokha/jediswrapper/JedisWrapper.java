@@ -81,6 +81,55 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 		this.binaryPubSubWrapper = new BinaryJedisPubSubWrapper(pool);
 	}
 
+
+    private static Field jedisTransactionField;
+
+    static {
+        try {
+            jedisTransactionField = BinaryJedis.class.getDeclaredField("transaction");
+            jedisTransactionField.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            Lombok.sneakyThrow(e);
+        }
+    }
+
+    /**
+     * Работает так же, как и {@link Jedis#multi()}, только использует вместо класса {@link Transaction}
+     * его наследника {@link JedisTransaction}, который освобождает ресурс {@link Jedis} вместе с собой
+     * в методе {@link JedisTransaction#close()}.
+     *
+     * <p>{@link JedisTransaction} является ресурсом. После завершения работы с ним, следует вызвать {@link JedisTransaction#close()}.
+     *
+     * <p>Пример использования:
+     * <pre>
+     *     JedisWrapper jedisWrapper = ...;
+     *     try (JedisTransaction multi = jedisWrapper.multi()) {
+     *         multi.set("key1", "value1");
+     *         multi.set("key2", "value2");
+     *         multi.exec();
+     *     }
+     * </pre>
+     */
+    public JedisTransaction multi() {
+        Jedis jedis = null;
+        JedisTransaction transaction = null;
+        try {
+            jedis = pool.getResource();
+            jedis.getClient().multi();
+            transaction = new JedisTransaction(jedis);
+            jedisTransactionField.set(jedis, transaction);
+        } catch (Exception e) {
+            if (jedis != null) {
+                try {
+                    jedis.close();
+                } catch (Exception ignored) {
+                }
+            }
+            Lombok.sneakyThrow(e);
+        }
+        return transaction;
+    }
+
 	private static Field jedisPipelineField;
 
 	static {
@@ -92,6 +141,25 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
         }
     }
 
+    /**
+     * Работает так же, как и {@link Jedis#pipelined()}, только использует вместо класса {@link Pipeline}
+     * его наследника {@link JedisPipeline}, который освобождает ресурс {@link Jedis} вместе с собой
+     * в методе {@link JedisPipeline#close()}.
+     *
+     * <p>{@link JedisPipeline} является ресурсом. После завершения работы с ним, следует вызвать {@link JedisPipeline#close()}.
+     *
+     * <p>Пример использования:
+     * <pre>
+     *     JedisWrapper jedisWrapper;
+     *     try (JedisPipeline pipeline = jedisWrapper.pipelined()) {
+     *         Response<String> response1 = pipeline.get("key1");
+     *         Response<String> response2 = pipeline.get("key2");
+     *         pipeline.sync();
+     *         String value1 = response1.get();
+     *         String value2 = response2.get();
+     *     }
+     * </pre>
+     */
     public JedisPipeline pipelined() {
         Jedis jedis = null;
         JedisPipeline pipeline = null;

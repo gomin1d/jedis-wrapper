@@ -3,28 +3,29 @@ package ua.lokha.jediswrapper;
 import lombok.Getter;
 import lombok.Lombok;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.Transaction;
 
 /**
- * Работает так же, как и {@link Pipeline}, только освобождает ресурс {@link #getJedis()} вместе с собой
+ * Работает так же, как и {@link Transaction}, только освобождает ресурс {@link #getJedis()} вместе с собой
  * в методе {@link #close()}.
  *
  * <p>Объект этого класса является ресурсом. После завершения работы с ним, следует вызвать {@link #close()}.
  */
-public class JedisPipeline extends Pipeline {
+public class JedisTransaction extends Transaction {
 
     /**
-     * Соединение с Redis, из которого создан этот pipeline.
+     * Соединение с Redis, из которого создана эта транзакция.
      */
     @Getter
     private Jedis jedis;
 
-    public JedisPipeline(Jedis jedis) {
+    public JedisTransaction(Jedis jedis) {
+        super(jedis.getClient());
         this.jedis = jedis;
     }
 
     /**
-     * Работает так же, как и {@link Pipeline#close()}, только освобождает ресурс {@link #getJedis()}.
+     * Работает так же, как и {@link JedisTransaction#close()}, только освобождает ресурс {@link #getJedis()}.
      */
     @Override
     public void close() {
