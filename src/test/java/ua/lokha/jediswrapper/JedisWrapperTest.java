@@ -113,11 +113,12 @@ public class JedisWrapperTest {
             JedisPipeline pipeline = wrapper.pipelined();
 
             Jedis jedis = pipeline.getJedis();
+            assertFalse(containsResourceInPool(jedis, wrapper.getPool()));
 
+            pipeline.sync();
             assertFalse(containsResourceInPool(jedis, wrapper.getPool()));
 
             pipeline.close();
-
             assertTrue(containsResourceInPool(jedis, wrapper.getPool()));
         }
     }
