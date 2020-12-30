@@ -50,6 +50,8 @@ import java.util.concurrent.Executor;
  *
  * <p>В {@code JedisWrapper} встроены улучшенные подписки {@link #subscribe(JedisPubSubListener, String...)} и
  * {@link #subscribe(BinaryJedisPubSubListener, byte[]...)}.
+ *
+ * <p>К этому классу есть <a href="https://github.com/lokha/jedis-wrapper#api">документация</a>.
  */
 public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedisCommands, MultiKeyBinaryCommands,
     AutoCloseable {
@@ -109,9 +111,10 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
     }
 
     /**
-     * Работает так же, как и {@link Jedis#multi()}, только использует вместо класса {@link Transaction}
-     * его наследника {@link JedisTransaction}, который освобождает ресурс {@link Jedis} вместе с собой
-     * в методе {@link JedisTransaction#close()}.
+     * Работает так же, как и {@link Jedis#multi()}, только возвращает
+     * объект тразакции {@link JedisTransaction} вместо {@link Transaction}.
+     * Отличительной особенностью {@link JedisTransaction} является то, что он при освобождении
+     * своего ресурса {@link JedisTransaction#close()} так же освобождает ресурс {@link Jedis}, который хранит внутри себя.
      *
      * <p>{@link JedisTransaction} является ресурсом. После завершения работы с ним, следует вызвать {@link JedisTransaction#close()}.
      *
@@ -157,9 +160,10 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
     }
 
     /**
-     * Работает так же, как и {@link Jedis#pipelined()}, только использует вместо класса {@link Pipeline}
-     * его наследника {@link JedisPipeline}, который освобождает ресурс {@link Jedis} вместе с собой
-     * в методе {@link JedisPipeline#close()}.
+     * Работает так же, как и {@link Jedis#pipelined()}, только возвращает
+     * объект pipeline {@link JedisPipeline} вместо {@link Pipeline}.
+     * Отличительной особенностью {@link JedisPipeline} является то, что он при освобождении
+     * своего ресурса {@link JedisPipeline#close()} так же освобождает ресурс {@link Jedis}, который хранит внутри себя.
      *
      * <p>{@link JedisPipeline} является ресурсом. После завершения работы с ним, следует вызвать {@link JedisPipeline#close()}.
      *

@@ -196,7 +196,7 @@ try (JedisPipeline pipeline = jedisWrapper.pipelined()) {
 
 Отличие `JedisWrapper.pipelined()` от `Jedis.pipelined()` заключается в том, что этот метод возвращает объект pipeline `JedisPipeline`
 вместо `Pipeline`. Отличительной особенностью `JedisPipeline` является то, что он при освобождении 
-его ресурса `JedisPipeline.close()` так же освобождает ресурс `Jedis`, который хранит внутри себя.
+своего ресурса `JedisPipeline.close()` так же освобождает ресурс `Jedis`, который хранит внутри себя.
 
 ## Транзации
 
@@ -211,4 +211,4 @@ try (JedisTransaction pipeline = jedisWrapper.multi()) {
 
 Отличие `JedisWrapper.multi()` от `Jedis.multi()` заключается в том, что этот метод возвращает объект транзации `JedisTransaction`
 вместо `Transaction`. Отличительной особенностью `JedisTransaction` является то, что он при освобождении 
-его ресурса `JedisTransaction.close()` так же освобождает ресурс `Jedis`, который хранит внутри себя.
+своего ресурса `JedisTransaction.close()` так же освобождает ресурс `Jedis`, который хранит внутри себя.

@@ -39,8 +39,9 @@ import java.util.concurrent.locks.ReentrantLock;
  *     в новой подписке.</li>
  * </ul>
  *
- *
  * <p>Эта обретка является ресурсом. После завершения работы с ней, следует вызвать {@link #close()}.
+ *
+ * <p>К этому классу есть <a href="https://github.com/lokha/jedis-wrapper#jedispubsubwrapper-%D0%B8-binaryjedispubsubwrapper">документация</a>.
  */
 @Log
 public class BinaryJedisPubSubWrapper implements AutoCloseable {
