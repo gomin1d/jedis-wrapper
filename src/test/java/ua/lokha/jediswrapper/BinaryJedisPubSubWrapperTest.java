@@ -8,8 +8,8 @@ import org.junit.Test;
 import redis.clients.jedis.BinaryJedisPubSub;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
+import redis.clients.util.SafeEncoder;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -59,7 +59,7 @@ public class BinaryJedisPubSubWrapperTest {
             Assert.assertNull(wrapper.getPubSub());
             Assert.assertEquals(0, wrapper.getResubscribeCount());
 
-            wrapper.subscribe(listener, "channel-name".getBytes(StandardCharsets.UTF_8));
+            wrapper.subscribe(listener, SafeEncoder.encode("channel-name"));
 
             Assert.assertNotNull(wrapper.getThread());
             Assert.assertNotNull(wrapper.getPubSub());
@@ -71,7 +71,7 @@ public class BinaryJedisPubSubWrapperTest {
     public void resubscribed() throws Exception {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
             wrapper.subscribe((channel, message) -> {
-            }, "channel-name".getBytes(StandardCharsets.UTF_8));
+            }, SafeEncoder.encode("channel-name"));
 
             BinaryJedisPubSub previously = wrapper.getPubSub();
             previously.unsubscribe();
@@ -112,14 +112,14 @@ public class BinaryJedisPubSubWrapperTest {
     public void subAndUnsub() throws Exception {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
             BinaryJedisPubSubListener listener = wrapper.subscribe((channel, message) -> {
-            }, "channel-name".getBytes(StandardCharsets.UTF_8));
-            Set<BinaryJedisPubSubListener> listeners = wrapper.getSubscribes().get(new ByteArrayWrapper("channel-name".getBytes(StandardCharsets.UTF_8)));
+            }, SafeEncoder.encode("channel-name"));
+            Set<BinaryJedisPubSubListener> listeners = wrapper.getSubscribes().get(new ByteArrayWrapper(SafeEncoder.encode("channel-name")));
             Assert.assertNotNull(listeners);
             Assert.assertTrue(listeners.contains(listener));
 
             Assert.assertTrue(wrapper.unsubscribe(listener));
             Assert.assertFalse(wrapper.unsubscribe(listener)); // double unsub -> false
-            listeners = wrapper.getSubscribes().get(new ByteArrayWrapper("channel-name".getBytes(StandardCharsets.UTF_8)));
+            listeners = wrapper.getSubscribes().get(new ByteArrayWrapper(SafeEncoder.encode("channel-name")));
             if (listeners != null) {
                 Assert.assertFalse(listeners.contains(listener));
             }
@@ -131,12 +131,12 @@ public class BinaryJedisPubSubWrapperTest {
         try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
             CountDownLatch latch = new CountDownLatch(1);
             wrapper.subscribe((channel, message) -> {
-                if (Arrays.equals(message, "message".getBytes(StandardCharsets.UTF_8))) {
+                if (Arrays.equals(message, SafeEncoder.encode("message"))) {
                     latch.countDown();
                 }
-            }, "channel-name".getBytes(StandardCharsets.UTF_8));
+            }, SafeEncoder.encode("channel-name"));
             try (Jedis jedis = pool.getResource()) {
-                jedis.publish("channel-name".getBytes(StandardCharsets.UTF_8), "message".getBytes(StandardCharsets.UTF_8));
+                jedis.publish(SafeEncoder.encode("channel-name"), SafeEncoder.encode("message"));
             }
             Assert.assertTrue("timeout await publish", latch.await(10, TimeUnit.SECONDS));
         }
@@ -150,13 +150,13 @@ public class BinaryJedisPubSubWrapperTest {
             CountDownLatch notPauseLatch = new CountDownLatch(1);
             CountDownLatch pauseLatch = new CountDownLatch(1);
             wrapper.subscribe((channel, message) -> {
-                if (Arrays.equals(message, "notPause".getBytes(StandardCharsets.UTF_8))) {
+                if (Arrays.equals(message, SafeEncoder.encode("notPause"))) {
                     notPauseLatch.countDown();
                 }
-                if (Arrays.equals(message, "pause".getBytes(StandardCharsets.UTF_8))) {
+                if (Arrays.equals(message, SafeEncoder.encode("pause"))) {
                     pauseLatch.countDown();
                 }
-            }, "channel-name".getBytes(StandardCharsets.UTF_8));
+            }, SafeEncoder.encode("channel-name"));
             try (Jedis jedis = pool.getResource()) {
                 jedis.publish("channel-name", "notPause");
             }

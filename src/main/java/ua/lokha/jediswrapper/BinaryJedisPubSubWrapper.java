@@ -7,8 +7,8 @@ import lombok.extern.java.Log;
 import redis.clients.jedis.BinaryJedisPubSub;
 import redis.clients.jedis.Jedis;
 import redis.clients.util.Pool;
+import redis.clients.util.SafeEncoder;
 
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -51,7 +51,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
      * Канал-загрушка. В библиотеке Jedis для создания и работы подписки {@link BinaryJedisPubSub}
      * нужен минимум один канал, иначе будет ошибка.
      */
-    private static final byte[] dummyChannel = "binary-jedis-pubsub-keep".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] dummyChannel = SafeEncoder.encode("binary-jedis-pubsub-keep");
 
     /**
      * Используется для поддержки многопоточности.
@@ -231,7 +231,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                 }
                 return new HashSet<>(1);
             }).add(listener);
-            log.info("Подписали на канал '" + new String(channel, StandardCharsets.UTF_8) + "' listener: " + listener);
+            log.info("Подписали на канал '" + SafeEncoder.encode(channel) + "' listener: " + listener);
             return listener;
         } finally {
             lock.unlock();
@@ -253,7 +253,7 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
             this.checkForClosed();
             return subscribes.entrySet().removeIf(setEntry -> {
                 if (setEntry.getValue().remove(listener)) {
-                    log.info("Отписали от канала " + new String(setEntry.getKey().getBytes(), StandardCharsets.UTF_8) +
+                    log.info("Отписали от канала " + SafeEncoder.encode(setEntry.getKey().getBytes()) +
                         " listener: " + listener);
                     if (setEntry.getValue().isEmpty() && pubSub != null) {
                         try {
@@ -296,8 +296,8 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
         try {
             if (pause) {
                 log.info("Игнорируем пришедшее сообщение на канал, поскольку подписка стоит на паузе. " +
-                    "Канал " + Arrays.toString(channel) + " (" + new String(channel) + "), " +
-                    "сообщение: " + Arrays.toString(message) + " (" + new String(message) + ")");
+                    "Канал " + Arrays.toString(channel) + " (" + SafeEncoder.encode(channel) + "), " +
+                    "сообщение: " + Arrays.toString(message) + " (" + SafeEncoder.encode(message) + ")");
                 return;
             }
             for (BinaryJedisPubSubListener listener : subscribes.getOrDefault(new ByteArrayWrapper(channel), Collections.emptySet())) {
@@ -305,9 +305,9 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
                     try {
                         listener.onMessage(channel, message);
                     } catch (Exception e) {
-                        log.info("Ошибка обработки канала " + Arrays.toString(channel) + " (" + new String(channel) + "), " +
+                        log.info("Ошибка обработки канала " + Arrays.toString(channel) + " (" + SafeEncoder.encode(channel) + "), " +
                             "listener: " + listener +
-                            ", сообщение: " + Arrays.toString(message) + " (" + new String(message) + ")");
+                            ", сообщение: " + Arrays.toString(message) + " (" + SafeEncoder.encode(message) + ")");
                         e.printStackTrace();
                     }
                 }));

@@ -14,9 +14,9 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.Response;
 import redis.clients.util.Pool;
+import redis.clients.util.SafeEncoder;
 
 import java.lang.reflect.Field;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -72,12 +72,12 @@ public class JedisWrapperTest {
         try (JedisWrapper wrapper = new JedisWrapper(pool)) {
             CountDownLatch latch = new CountDownLatch(1);
             wrapper.subscribe((channel, message) -> {
-                if (Arrays.equals(message, "message".getBytes(StandardCharsets.UTF_8))) {
+                if (Arrays.equals(message, SafeEncoder.encode("message"))) {
                     latch.countDown();
                 }
-            }, "channel-name".getBytes(StandardCharsets.UTF_8));
+            }, SafeEncoder.encode("channel-name"));
 
-            wrapper.publish("channel-name".getBytes(StandardCharsets.UTF_8), "message".getBytes(StandardCharsets.UTF_8));
+            wrapper.publish(SafeEncoder.encode("channel-name"), SafeEncoder.encode("message"));
             Assert.assertTrue("timeout await publish", latch.await(10, TimeUnit.SECONDS));
         }
     }
@@ -88,7 +88,7 @@ public class JedisWrapperTest {
         wrapper.subscribe((channel, message) -> {
         }, "channel-name");
         wrapper.subscribe((channel, message) -> {
-        }, "binary-channel-name".getBytes(StandardCharsets.UTF_8));
+        }, SafeEncoder.encode("binary-channel-name"));
 
         assertFalse(wrapper.getPubSubWrapper().isClosed());
         assertTrue(wrapper.getPubSubWrapper().getPubSub().isSubscribed());
