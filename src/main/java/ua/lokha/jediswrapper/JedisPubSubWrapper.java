@@ -1,6 +1,7 @@
 package ua.lokha.jediswrapper;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.java.Log;
 import redis.clients.jedis.Jedis;
@@ -97,6 +98,16 @@ public class JedisPubSubWrapper implements AutoCloseable {
      */
     @Getter
     private int resubscribeCount = 0;
+
+    /**
+     * Стоит ли подписка на паузе.
+     *
+     * <p>Если установить значение {@code true}, тогда подписка будет игнорировать входящие сообщения
+     * и не будет вызывать слушатели сообщений.
+     */
+    @Setter
+    @Getter
+    private boolean pause = false;
 
     /**
      * Работает так же, как и {@link #JedisPubSubWrapper(Pool, Executor, boolean)}.
@@ -282,14 +293,19 @@ public class JedisPubSubWrapper implements AutoCloseable {
     private void callListeners(String channel, String message) {
         lock.lock();
         try {
+            if (pause) {
+                log.info("Игнорируем пришедшее сообщение на канал, поскольку подписка стоит на паузе. " +
+                    "Канал " + channel + ", сообщение: " + message);
+                return;
+            }
             for (JedisPubSubListener listener : subscribes.getOrDefault(channel, Collections.emptySet())) {
                 executor.execute((() -> { // каждое сообщение вызывается в отдельном вызове Executor'a
                     try {
                         listener.onMessage(channel, message);
                     } catch (Exception e) {
-                        log.info("Ошибка обработки канала " + channel + " (" + channel + "), " +
+                        log.info("Ошибка обработки канала " + channel + ", " +
                             "listener: " + listener +
-                            ", сообщение: " + message + " (" + message + ")");
+                            ", сообщение: " + message);
                         e.printStackTrace();
                     }
                 }));

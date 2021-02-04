@@ -136,9 +136,38 @@ public class BinaryJedisPubSubWrapperTest {
                 }
             }, "channel-name".getBytes(StandardCharsets.UTF_8));
             try (Jedis jedis = pool.getResource()) {
-                jedis.publish("channel-name", "message");
+                jedis.publish("channel-name".getBytes(StandardCharsets.UTF_8), "message".getBytes(StandardCharsets.UTF_8));
             }
             Assert.assertTrue("timeout await publish", latch.await(10, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    public void pause() throws Exception {
+        try (BinaryJedisPubSubWrapper wrapper = new BinaryJedisPubSubWrapper(pool, Runnable::run)) {
+            // pause false
+            wrapper.setPause(false);
+            CountDownLatch notPauseLatch = new CountDownLatch(1);
+            CountDownLatch pauseLatch = new CountDownLatch(1);
+            wrapper.subscribe((channel, message) -> {
+                if (Arrays.equals(message, "notPause".getBytes(StandardCharsets.UTF_8))) {
+                    notPauseLatch.countDown();
+                }
+                if (Arrays.equals(message, "pause".getBytes(StandardCharsets.UTF_8))) {
+                    pauseLatch.countDown();
+                }
+            }, "channel-name".getBytes(StandardCharsets.UTF_8));
+            try (Jedis jedis = pool.getResource()) {
+                jedis.publish("channel-name", "notPause");
+            }
+            Assert.assertTrue("timeout await publish", notPauseLatch.await(10, TimeUnit.SECONDS));
+
+            // pause true
+            wrapper.setPause(true);
+            try (Jedis jedis = pool.getResource()) {
+                jedis.publish("channel-name", "pause");
+            }
+            Assert.assertFalse("pause not work", pauseLatch.await(5, TimeUnit.SECONDS));
         }
     }
 }

@@ -139,4 +139,33 @@ public class JedisPubSubWrapperTest {
             Assert.assertTrue("timeout await publish", latch.await(10, TimeUnit.SECONDS));
         }
     }
+
+    @Test
+    public void pause() throws Exception {
+        try (JedisPubSubWrapper wrapper = new JedisPubSubWrapper(pool, Runnable::run)) {
+            // pause false
+            wrapper.setPause(false);
+            CountDownLatch notPauseLatch = new CountDownLatch(1);
+            CountDownLatch pauseLatch = new CountDownLatch(1);
+            wrapper.subscribe((channel, message) -> {
+                if (message.equals("notPause")) {
+                    notPauseLatch.countDown();
+                }
+                if (message.equals("pause")) {
+                    pauseLatch.countDown();
+                }
+            }, "channel-name");
+            try (Jedis jedis = pool.getResource()) {
+                jedis.publish("channel-name", "notPause");
+            }
+            Assert.assertTrue("timeout await publish", notPauseLatch.await(10, TimeUnit.SECONDS));
+
+            // pause true
+            wrapper.setPause(true);
+            try (Jedis jedis = pool.getResource()) {
+                jedis.publish("channel-name", "pause");
+            }
+            Assert.assertFalse("pause not work", pauseLatch.await(5, TimeUnit.SECONDS));
+        }
+    }
 }
