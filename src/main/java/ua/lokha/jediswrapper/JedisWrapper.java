@@ -1,7 +1,6 @@
 package ua.lokha.jediswrapper;
 
 import lombok.Getter;
-import lombok.Lombok;
 import redis.clients.jedis.*;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.jedis.params.sortedset.ZAddParams;
@@ -106,7 +105,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
             jedisTransactionField = BinaryJedis.class.getDeclaredField("transaction");
             jedisTransactionField.setAccessible(true);
         } catch (NoSuchFieldException e) {
-            Lombok.sneakyThrow(e);
+            ThrowUtils.sneakyThrow(e);
         }
     }
 
@@ -143,7 +142,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
                 } catch (Exception ignored) {
                 }
             }
-            Lombok.sneakyThrow(e);
+            ThrowUtils.sneakyThrow(e);
         }
         return transaction;
     }
@@ -155,7 +154,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
 	        jedisPipelineField = BinaryJedis.class.getDeclaredField("pipeline");
 	        jedisPipelineField.setAccessible(true);
         } catch (NoSuchFieldException e) {
-            Lombok.sneakyThrow(e);
+            ThrowUtils.sneakyThrow(e);
         }
     }
 
@@ -194,7 +193,7 @@ public class JedisWrapper implements JedisCommands, MultiKeyCommands, BinaryJedi
                 } catch (Exception ignored) {
                 }
             }
-            Lombok.sneakyThrow(e);
+            ThrowUtils.sneakyThrow(e);
         }
         return pipeline;
     }

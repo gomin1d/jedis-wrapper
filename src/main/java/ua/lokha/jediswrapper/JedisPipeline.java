@@ -1,7 +1,6 @@
 package ua.lokha.jediswrapper;
 
 import lombok.Getter;
-import lombok.Lombok;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 
@@ -31,7 +30,7 @@ public class JedisPipeline extends Pipeline {
         try {
             super.close();
         } catch (Exception e) {
-            Lombok.sneakyThrow(e);
+            ThrowUtils.sneakyThrow(e);
         } finally {
             jedis.close();
         }
