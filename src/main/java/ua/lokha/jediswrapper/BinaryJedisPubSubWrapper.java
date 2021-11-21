@@ -295,9 +295,6 @@ public class BinaryJedisPubSubWrapper implements AutoCloseable {
         lock.lock();
         try {
             if (pause) {
-                log.info("Игнорируем пришедшее сообщение на канал, поскольку подписка стоит на паузе. " +
-                    "Канал " + Arrays.toString(channel) + " (" + SafeEncoder.encode(channel) + "), " +
-                    "сообщение: " + Arrays.toString(message) + " (" + SafeEncoder.encode(message) + ")");
                 return;
             }
             for (BinaryJedisPubSubListener listener : subscribes.getOrDefault(new ByteArrayWrapper(channel), Collections.emptySet())) {

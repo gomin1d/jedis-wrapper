@@ -294,8 +294,6 @@ public class JedisPubSubWrapper implements AutoCloseable {
         lock.lock();
         try {
             if (pause) {
-                log.info("Игнорируем пришедшее сообщение на канал, поскольку подписка стоит на паузе. " +
-                    "Канал " + channel + ", сообщение: " + message);
                 return;
             }
             for (JedisPubSubListener listener : subscribes.getOrDefault(channel, Collections.emptySet())) {
